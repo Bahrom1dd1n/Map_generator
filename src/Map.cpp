@@ -2,6 +2,7 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
+#include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_video.h>
 
 #include "Wall.h"
@@ -20,7 +21,7 @@ Map::Map(int window_width, int window_height, SDL_WindowFlags flags) {
     printf("Double Buffering ON: %d\n", doubleBuffering);
     SDL_GetWindowSize(window, &window_width, &window_height);
     frame.w = window_width;
-    frame.x = window_height;
+    frame.h = window_height;
 }
 Map::~Map() {
     SDL_DestroyRenderer(this->renderer);
@@ -132,7 +133,7 @@ void Map::SelectObjectsInRect(SDL_FRect rect) {
 void Map::DestroySelectedObjects() {
     if (num_selected_obj == 0) return;
 
-    std::list<Wall>::iterator it;
+    std::list<Wall>::iterator it = walls.begin();
 
     for (int i = num_selected_obj; i > 0; i--) {
         it = walls.erase(it);
@@ -141,6 +142,25 @@ void Map::DestroySelectedObjects() {
     num_selected_point = 0;
     num_selected_obj = 0;
     pointMoved = false;
+}
+
+void Map::DestroySelectedPoints() {
+    if (num_selected_obj == 0 || num_selected_point == 0) return;
+    auto& obj = walls.front();
+    if (obj.points.size() < 4)  // at least polygon must have three vertexes
+        return;
+
+    auto it = first_point;
+    auto end = obj.points.end();
+    auto& selected_points = obj.points;
+    for (int i = num_selected_point; i > 0; i--) {
+        if (it == end) it = obj.points.begin();
+        it = selected_points.erase(it);
+    }
+
+    pointMoved = false;
+    num_selected_point = 0;
+    obj.Reset();
 }
 void Map::SelectPointsInRect(SDL_FRect rect) {
     if (!(num_selected_obj == 1)) return;
@@ -189,24 +209,6 @@ void Map::SelectPointsInRect(SDL_FRect rect) {
     }
 }
 
-void Map::DestroySelectedPoints() {
-    if (num_selected_obj == 0 || num_selected_point == 0) return;
-    auto& obj = walls.front();
-    if (obj.points.size() < 4)  // at least polygon must have three vertexes
-        return;
-
-    auto it = first_point;
-    auto end = obj.points.end();
-    auto& selected_points = obj.points;
-    for (int i = num_selected_point; i > 0; i--) {
-        if (it == end) it = obj.points.begin();
-        it = selected_points.erase(it);
-    }
-
-    pointMoved = false;
-    num_selected_point = 0;
-    obj.Reset();
-}
 void Map::ResetSelectedObject() {
     if (!Map::num_selected_obj || !pointMoved) return;
     Wall& obj = Map::walls.front();
@@ -237,8 +239,8 @@ void Map::AddPointToSelected(float x, float y) {
 bool Map::SelectObjectAt(float x, float y) {
     for (auto it = Map::walls.begin(); it != Map::walls.end(); it++) {
         if (it->ContainPoint(x, y)) {
-            Map::walls.splice(Map::walls.begin(), Map::walls,
-                              it);      // selected object moved to the last potion
+            // selected object moved to the last potion
+            Map::walls.splice(Map::walls.begin(), Map::walls, it);
             Map::num_selected_obj = 1;  // so if num_selected_obj == 1 , last object is selected
             Map::num_selected_point = 0;
             return true;
@@ -252,7 +254,7 @@ bool Map::SelectObjectAt(float x, float y) {
     return false;
 }
 void Map::CreateObjectAt(float x, float y) {
-    Map::walls.emplace_front(x, y);
+    Map::walls.emplace_front(this, x, y);
     Map::num_selected_obj = 1;
     Map::num_selected_point = 0;
 }
@@ -329,7 +331,7 @@ void Map::OnKeyDown(unsigned short key) {
             scale = 1;
         } break;
 
-        case 76:
+        case SDL_SCANCODE_DELETE:  // when delete key was pressed
             if (IsPointSelected())
                 DestroySelectedPoints();
             else
@@ -448,8 +450,10 @@ void Map::OnMouseDown(float x, float y, short mb) {
             break;
 
         case 3:  // right mouse button
+            // if Ctr right mouse button is clicked while holding Ctrl add point to selected obj
             if (keystate[44]) {
-                walls.front().AddPoint(x, y);
+                first_point = walls.front().AddPoint(x, y);
+                num_selected_point = 1;
                 break;
             }
 
@@ -461,10 +465,35 @@ void Map::OnMouseDown(float x, float y, short mb) {
             }
 
             first_point = walls.front().SelectPointAt(x, y);  // selecting point from selected wall
+            num_selected_point = 1;
             break;
     }
 }
 
+void Map::OnMouseMove(float x, float y, short mb) {
+    if (SDL_GetModState() == 256 && select_mode) {
+        select_rect.w = x - select_rect.x;
+        select_rect.h = y - select_rect.y;
+        return;
+    }
+
+    if (mb == 1) {
+        MoveSelectedObjectsBy((x - mouse_point.x) * inverse_scale,
+                              (y - mouse_point.y) * inverse_scale);
+        mouse_point.x = x;
+        mouse_point.y = y;
+    }
+    if (mb == 2) {
+        dx = (x - mouse_point.x) * 0.005F;
+        dy = (y - mouse_point.y) * 0.005F;
+    }
+    if (mb == 4) {
+        MoveSelectedPointsBy((x - mouse_point.x) * inverse_scale,
+                             (y - mouse_point.y) * inverse_scale);
+        mouse_point.x = x;
+        mouse_point.y = y;
+    }
+}
 void Map::OnMouseUp(float x, float y, short mb) {
     if (mb == 1) {
         if (select_mode == 1) {
@@ -528,7 +557,50 @@ void Map::HandleEvents() {
         }
     }
 }
-void Map::Update() {}
+void Map::Update() {
+    SDL_SetRenderDrawColor(this->renderer, 0, 0, 0, 255);
+    SDL_RenderClear(this->renderer);
+    if (scaling) {
+        if ((scale < 0.5 && scaling < 0) || (scale > 3 && scaling > 0)) {
+            scaling = 0;
+            return;
+        }
+
+        float dS = scaling * 0.01F;
+        /* oreder of calculations is important*/
+        scale += dS;
+        float centrize = (inverse_scale - 1 / scale) * 0.5F;
+        inverse_scale = 1 / scale;
+
+        frame.x += frame.w * centrize;
+        frame.y += frame.h * centrize;
+    }
+
+    if (dy) frame.y += dy * time_elapsed;
+
+    if (dx) frame.x += dx * time_elapsed;
+
+    if (selected_dx || selected_dy) {
+        if (IsPointSelected()) {
+            MoveSelectedPointsBy(selected_dx, selected_dy);
+        } else
+            MoveSelectedObjectsBy(selected_dx, selected_dy);
+    }
+    if (rotate_selected) {
+        RotateSelectedObjectBy(rotate_selected);
+    };
+    auto it = this->walls.begin();
+    for (int i = 0; i < this->num_selected_obj; i++) {
+        if (it->InsideFrame(this->frame)) it->Render(true);
+        it++;
+    }
+    while (it != walls.end()) {
+        if (it->InsideFrame(this->frame)) it->Render();
+        it++;
+    }
+    ShowSelectedPoints();
+    SDL_RenderPresent(this->renderer);
+}
 void Map::Start() {
     this->running = true;
 

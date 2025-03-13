@@ -50,7 +50,7 @@ class Map {
     void OnMouseUp(float x, float y, short mb);
 
    public:
-    Map(int window_width, int window_height, SDL_WindowFlags flags);
+    Map(int window_width, int window_height, SDL_WindowFlags flags = SDL_WINDOW_SHOWN);
     inline SDL_Renderer* GetRenderer() const { return this->renderer; }
     inline const SDL_FRect GetFrame() const { return this->frame; }
     inline bool IsPointSelected() const { return Map::num_selected_point; }

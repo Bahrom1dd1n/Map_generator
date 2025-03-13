@@ -12,8 +12,9 @@ SDL_Color Wall::color = {100, 255, 100, 255};
 
 Wall::Wall() {}
 
-Wall::Wall(float x, float y) {
+Wall::Wall(Map* map, float x, float y) {
     this->center = {x, y};
+    this->map = map;
 
     this->points.push_back({-40.0F, -40.0F});
     this->points.push_back({40.0F, -40.0F});
@@ -67,7 +68,7 @@ bool Wall::ContainPoint(float x, float y) {
     return false;
 }
 
-void Wall::Render() {
+void Wall::Render(bool selected) {
     const SDL_FRect& frame = this->map->GetFrame();
     float& scale = this->map->scale;
     SDL_Renderer* renderer = this->map->GetRenderer();
@@ -84,7 +85,10 @@ void Wall::Render() {
     p1.x += c.x;
     p1.y += c.y;
 
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 255);
+    if (selected)
+        SDL_SetRenderDrawColor(renderer, color.g, color.r, color.b, 255);
+    else
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 255);
     for (auto& p : this->points) {
         SDL_FPoint p2 = {p.x * scale + c.x, p.y * scale + c.y};
         SDL_RenderDrawLineF(renderer, p1.x, p1.y, p2.x, p2.y);
