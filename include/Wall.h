@@ -22,12 +22,10 @@ class Wall {
     static SDL_Color color;
     std::list<SDL_FPoint> points;  // boundary points of polygon
     Map* map = nullptr;
-    Wall();
+    Wall(const SDL_FPoint& center = {0.0F, 0.0F});
     Wall(Map* map, float x, float y);
 
    public:
-    static const short data_size;  // size of wall - sizeof points
-
     bool InsideFrame(const SDL_FRect& frame);
     bool ContainPoint(float x, float y);
     std::list<SDL_FPoint>::iterator AddPoint(float x, float y);
@@ -41,8 +39,6 @@ class Wall {
     std::list<SDL_FPoint>::iterator SelectPointAt(float x, float y);
 
     void RotateBy(float da);
-    void SaveToFile(std::ofstream& file, int position = -1);
-    void ReadFromFile(std::ifstream& file, int position = -1);
     void MovePointsBy(std::list<SDL_FPoint>::iterator start, float dx, float dy, int n = 1);
 
     friend class Map;

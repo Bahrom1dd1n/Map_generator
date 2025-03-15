@@ -1,6 +1,7 @@
 #include "Map.h"
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_video.h>
@@ -11,15 +12,17 @@ Map::Map(int window_width, int window_height, SDL_WindowFlags flags) {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Init(SDL_INIT_EVENTS);
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2");
-    int x = SDL_WINDOWPOS_CENTERED, y = SDL_WINDOWPOS_CENTERED;
-    this->window =
-        SDL_CreateWindow("Map", x, y, window_width, window_width, SDL_WINDOW_SHOWN | flags);
+
+    this->window = SDL_CreateWindow("Map", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                    window_width, window_height, SDL_WINDOW_SHOWN | flags);
     this->renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     this->frame_delay = 16;
-    int doubleBuffering = 0;
-    SDL_GL_GetAttribute(SDL_GL_DOUBLEBUFFER, &doubleBuffering);
-    printf("Double Buffering ON: %d\n", doubleBuffering);
-    SDL_GetWindowSize(window, &window_width, &window_height);
+    if (flags | SDL_WINDOW_FULLSCREEN_DESKTOP) {
+        SDL_Rect bounds;
+        window_width = SDL_GetDisplayBounds(0, &bounds);
+        window_width = bounds.w;
+        window_height = bounds.h;
+    }
     frame.w = window_width;
     frame.h = window_height;
 }
@@ -37,9 +40,19 @@ void Map::LoadWallsFromFile(const char* file_name) {
     }
     int num_obj;
     file.read((char*)&num_obj, sizeof(int));
+
+    SDL_FPoint point;
+    int num_points = 0;
     while (num_obj-- > 0) {
-        walls.emplace_back();
-        walls.back().ReadFromFile(file);
+        file.read((char*)&point, sizeof(SDL_FPoint));
+        walls.emplace_back(point);
+
+        file.read((char*)&num_points, sizeof(int));
+        auto& new_wall = walls.emplace_back(point);
+        while (num_points-- > 0) {
+            file.read((char*)&point, sizeof(SDL_FPoint));
+            new_wall.points.push_back(point);
+        }
     }
     file.close();
 }
@@ -54,7 +67,12 @@ void Map::SaveWallsToFile(const char* file_name) {
     file.write((char*)&num_objects, sizeof(int));
 
     for (Wall& i : walls) {
-        i.SaveToFile(file);
+        file.write((char*)&i.center, sizeof(SDL_FPoint));
+        int num_points = i.points.size();
+        file.write((char*)&num_points, sizeof(int));
+        for (SDL_FPoint& p : i.points) {
+            file.write((char*)&p, sizeof(SDL_FPoint));
+        }
     }
 
     file.close();
@@ -434,12 +452,13 @@ void Map::OnMouseDown(float x, float y, short mb) {
     auto* keystate = SDL_GetKeyboardState(NULL);
     switch (mb) {
         case 1:  // left mouse button
-            if (keystate[44]) {
+            // if left mouse button is clicked while holding space then
+            if (keystate[SDL_SCANCODE_SPACE]) {
                 Map::CreateObjectAt(x, y);
                 break;
             }
-
-            if (SDL_GetModState() == 256) {
+            // if left mouse button is clicked hoding Alt key then selection mode is on
+            if (keystate[SDL_SCANCODE_LALT]) {
                 select_rect.x = mouse_point.x;
                 select_rect.y = mouse_point.y;
                 select_mode = 1;
@@ -451,9 +470,13 @@ void Map::OnMouseDown(float x, float y, short mb) {
 
         case 3:  // right mouse button
             // if Ctr right mouse button is clicked while holding Ctrl add point to selected obj
-            if (keystate[44]) {
-                first_point = walls.front().AddPoint(x, y);
-                num_selected_point = 1;
+            if (keystate[SDL_SCANCODE_LCTRL]) {
+                auto& obj = walls.front();
+                first_point = obj.AddPoint(x, y);
+                if (first_point != obj.points.end())
+                    num_selected_point = 1;
+                else
+                    num_selected_point = 0;
                 break;
             }
 
@@ -464,8 +487,8 @@ void Map::OnMouseDown(float x, float y, short mb) {
                 break;
             }
 
-            first_point = walls.front().SelectPointAt(x, y);  // selecting point from selected wall
-            num_selected_point = 1;
+            num_selected_point = 0;
+            SelectPointFromSelectedObject(x, y);
             break;
     }
 }
@@ -589,14 +612,24 @@ void Map::Update() {
     if (rotate_selected) {
         RotateSelectedObjectBy(rotate_selected);
     };
+    SDL_FRect bounds = this->frame;
+    bounds.w *= inverse_scale;
+    bounds.h *= inverse_scale;
     auto it = this->walls.begin();
     for (int i = 0; i < this->num_selected_obj; i++) {
-        if (it->InsideFrame(this->frame)) it->Render(true);
+        if (it->InsideFrame(bounds)) it->Render(true);
         it++;
     }
     while (it != walls.end()) {
-        if (it->InsideFrame(this->frame)) it->Render();
+        if (it->InsideFrame(bounds)) it->Render();
         it++;
+    }
+    if (select_mode) {
+        if (select_mode == 1)
+            SDL_SetRenderDrawColor(renderer, 0, 255, 50, 255);
+        else
+            SDL_SetRenderDrawColor(renderer, 0, 50, 255, 255);
+        SDL_RenderDrawRectF(this->renderer, &select_rect);
     }
     ShowSelectedPoints();
     SDL_RenderPresent(this->renderer);
