@@ -70,8 +70,8 @@ class Map {
     void CreateObjectAt(float x, float y);
     bool SelectObjectAt(float x, float y);
     void ResetSelectedObject();
-    void LoadWallsFromFile(const char* file_name);
-    void SaveWallsToFile(const char* file_name);
+    void LoadMap(const char* file_name);
+    void SaveMap(const char* file_name);
 
     void Start();
     void Stop();

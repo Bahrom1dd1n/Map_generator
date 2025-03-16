@@ -11,8 +11,7 @@
 Map::Map(int window_width, int window_height, SDL_WindowFlags flags) {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Init(SDL_INIT_EVENTS);
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2");
-
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
     this->window = SDL_CreateWindow("Map", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                     window_width, window_height, SDL_WINDOW_SHOWN | flags);
     this->renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -32,7 +31,7 @@ Map::~Map() {
     SDL_Quit();
 }
 
-void Map::LoadWallsFromFile(const char* file_name) {
+void Map::LoadMap(const char* file_name) {
     std::ifstream file(file_name, std::ios::binary);
     if (!file.is_open()) {
         std::cout << " File not found!" << std::endl;
@@ -45,19 +44,18 @@ void Map::LoadWallsFromFile(const char* file_name) {
     int num_points = 0;
     while (num_obj-- > 0) {
         file.read((char*)&point, sizeof(SDL_FPoint));
-        walls.emplace_back(point);
-
         file.read((char*)&num_points, sizeof(int));
-        auto& new_wall = walls.emplace_back(point);
+        auto& new_wall = walls.emplace_back(this, point);
         while (num_points-- > 0) {
             file.read((char*)&point, sizeof(SDL_FPoint));
             new_wall.points.push_back(point);
         }
+        new_wall.Reset();
     }
     file.close();
 }
 
-void Map::SaveWallsToFile(const char* file_name) {
+void Map::SaveMap(const char* file_name) {
     if (walls.size() == 0) return;
 
     std::ofstream file(file_name, std::ios::binary | std::ios::trunc);
@@ -307,25 +305,25 @@ void Map::OnKeyDown(unsigned short key) {
 
     old_key = key;
     switch (key) {
-        case 26:  // key "W"
+        case SDL_SCANCODE_W:  // key "W"
 
             dy = -0.3F;
             break;
-        case 22:  // key "S"
+        case SDL_SCANCODE_S:  // key "S"
             // if left ctrl is pressed with "S" then saving to file will be carried uot
             if (SDL_GetModState() == 64) {
                 std::cout << " Enter name of file to be saved: ";
                 std::string file_name;
                 std::cin >> file_name;
-                SaveWallsToFile(file_name.c_str());
+                SaveMap(file_name.c_str());
                 break;
             }
             dy = 0.3F;
             break;
-        case 7:  // key "D"
+        case SDL_SCANCODE_D:  // key "D"
             dx = 0.3F;
             break;
-        case 4:  // key "A"
+        case SDL_SCANCODE_A:  // key "A"
             dx = -0.3F;
             break;
         case 87:
@@ -334,7 +332,7 @@ void Map::OnKeyDown(unsigned short key) {
             break;  // key "+"
 
         case 86:
-            // if L Ctrl is not pressed then zooming will not work
+            // if LCtrl is not pressed then zooming will not work
             if (SDL_GetModState() == 64) scaling = -1;
             break;  // key "-"
 
@@ -357,25 +355,25 @@ void Map::OnKeyDown(unsigned short key) {
 
             break;
 
-        case 15:
+        case SDL_SCANCODE_L:
             if (SDL_GetModState() == 64) {
                 std::cout << " Enter name of file to be loaded: ";
                 std::string file_name;
                 std::cin >> file_name;
-                LoadWallsFromFile(file_name.c_str());
+                LoadMap(file_name.c_str());
             }
             break;
 
-        case 82:  // up arrow key
+        case SDL_SCANCODE_UP:  // up arrow key
             selected_dy = -2.0F;
             break;
 
-        case 81:  // down arrow key
+        case SDL_SCANCODE_DOWN:  // down arrow key
             selected_dy = 2.0F;
             break;
 
-        case 79:  // right arrow key , if  L Alt is pressed then it rotates selected object to
-                  // right
+        case SDL_SCANCODE_RIGHT:  // right arrow key , if  L Alt is pressed then it rotates selected
+                                  // object to right
             if (SDL_GetModState() == 256) {
                 rotate_selected = 2.0F;
                 break;
@@ -383,7 +381,8 @@ void Map::OnKeyDown(unsigned short key) {
             selected_dx = 2.0F;
             break;
 
-        case 80:  // left arrow key, if L Alt is pressed then it rotates selected object to left
+        case SDL_SCANCODE_LEFT:  // left arrow key, if L Alt is pressed then it rotates selected
+                                 // object to left
             if (SDL_GetModState() == 256) {
                 rotate_selected = -2.0F;
                 break;

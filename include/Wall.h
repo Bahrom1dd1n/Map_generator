@@ -22,7 +22,7 @@ class Wall {
     static SDL_Color color;
     std::list<SDL_FPoint> points;  // boundary points of polygon
     Map* map = nullptr;
-    Wall(const SDL_FPoint& center = {0.0F, 0.0F});
+    Wall(Map* map, const SDL_FPoint& center = {0.0F, 0.0F});
     Wall(Map* map, float x, float y);
 
    public:

@@ -9,7 +9,7 @@
 
 SDL_Color Wall::color = {100, 255, 100, 255};
 
-Wall::Wall(const SDL_FPoint& center) : center(center) {};
+Wall::Wall(Map* map, const SDL_FPoint& center) : center(center), map(map) {};
 
 Wall::Wall(Map* map, float x, float y) {
     this->center = {x, y};
